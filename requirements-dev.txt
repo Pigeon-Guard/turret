@@ -8,12 +8,18 @@ colorzero==2.0
     # via
     #   -r requirements-prod.txt
     #   gpiozero
+dotenv==0.9.9
+    # via -r requirements-prod.txt
 gpiozero==2.0.1
     # via -r requirements-prod.txt
 paho-mqtt==2.1.0
     # via -r requirements-prod.txt
 pigpio==1.78
     # via -r requirements-prod.txt
+python-dotenv==1.2.2
+    # via
+    #   -r requirements-prod.txt
+    #   dotenv
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools

@@ -1,3 +1,4 @@
+dotenv
 pigpio
 gpiozero
 paho-mqtt
