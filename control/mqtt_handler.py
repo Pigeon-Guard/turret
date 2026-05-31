@@ -1,13 +1,11 @@
 """MQTT message handling and client management."""
 import json
-import threading
 import time
-from typing import Optional
 
 import paho.mqtt.client as mqtt
 
-from app.config import Config
-from app.state_manager import StateManager
+from config.config import Config
+from control.state_manager import StateManager
 
 
 def clamp(value: float, low: float, high: float) -> float:
@@ -127,7 +125,6 @@ def create_mqtt_client(mqtt_handler: MQTTHandler) -> mqtt.Client:
     """Create and configure MQTT client."""
     client = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2,
-        client_id=Config.MQTT_CLIENT_ID,
         clean_session=True
     )
 

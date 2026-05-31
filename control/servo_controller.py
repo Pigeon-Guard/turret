@@ -6,9 +6,9 @@ from typing import Optional
 
 import paho.mqtt.client as mqtt
 
-from app.config import Config
-from app.hardware import ServoAdapter
-from app.state_manager import StateManager
+from config.config import Config
+from control.hardware import ServoAdapter
+from control.state_manager import StateManager
 
 
 def clamp(value: float, low: float, high: float) -> float:
@@ -56,7 +56,7 @@ class ServoController:
                     )
                     self.tilt_servo.set_angle(self.state_manager.state.tilt_angle)
 
-            if stale or Config.STATE_LOGGING:
+            if stale:
                 self.state_manager.publish_state(client)
 
             time.sleep(Config.STEP_INTERVAL_SEC)

@@ -1,0 +1,58 @@
+services:
+  control:
+    build:
+      context: .
+      dockerfile: Dockerfile.control
+    depends_on:
+      - message
+    environment:
+      - MQTT_HOST=${MQTT_HOST}
+      - MQTT_PORT=${MQTT_PORT}
+      - MQTT_TOPIC=${MQTT_TOPIC}
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID}
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    ports:
+      - "80:8080"
+    depends_on:
+      - message
+      - video
+    environment:
+      - MQTT_HOST=${MQTT_HOST}
+      - MQTT_PORT=${MQTT_PORT}
+      - MQTT_TOPIC=${MQTT_TOPIC}
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID}
+      - HLS_URL=${HLS_URL}
+  video:
+    image: bluenviron/mediamtx:1
+    ports:
+      - "8554:8554" # TCP/RTSP
+      - "8888:8888" # HLS
+    environment:
+      - MTX_PROTOCOLS=tcp
+    healthcheck:
+      test: ["CMD", "nc", "-z", "-w", "2", "localhost", "8554"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+  message:
+    image: emqx/nanomq:latest
+    ports:
+      - "1883:1883"
+      - "8083:8083"
+    environment:
+      - NANOMQ_BROKER_URL=nmq-tcp://0.0.0.0:1883
+      - NANOMQ_ALLOW_ANONYMOUS=true
+      - NANOMQ_HTTP_SERVER_ENABLE=false
+      - NANOMQ_WEBSOCKET_ENABLE=true
+      - NANOMQ_WEBSOCKET_URL=nmq-ws://0.0.0.0:8083/mqtt
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "-w", "2", "localhost", "1883"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

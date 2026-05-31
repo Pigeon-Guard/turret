@@ -1,0 +1,21 @@
+FROM python:3.11-slim AS base
+
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements-ui.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY ui/ ./ui/
+COPY config/ ./config/
+
+# Create non-root user for security
+RUN useradd -m -u 1000 turret && chown -R turret:turret /app
+USER turret
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Run the application
+CMD ["python", "-m", "ui.main"]

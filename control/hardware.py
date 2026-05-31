@@ -26,12 +26,16 @@ class TriggerAdapter:
         self.value = True
         if self.device:
             self.device.on()
+        else:
+            print("Trigger activated (simulation mode)")
 
     def off(self):
         """Deactivate trigger."""
         self.value = False
         if self.device:
             self.device.off()
+        else:
+            print("Trigger deactivated (simulation mode)")
 
     def close(self):
         """Close and cleanup device."""
@@ -57,6 +61,8 @@ class ServoAdapter:
         self.angle = angle
         if self.device:
             self.device.angle = angle
+        else:
+            print(f"Servo angle set to {angle} (simulation mode)")
 
     def detach(self):
         """Detach servo motor."""

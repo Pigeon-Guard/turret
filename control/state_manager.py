@@ -6,8 +6,8 @@ from typing import Optional
 
 import paho.mqtt.client as mqtt
 
-from app.config import Config
-from app.models import SharedState
+from config.config import Config
+from control.models import SharedState
 
 
 class StateManager:
@@ -72,5 +72,3 @@ class StateManager:
         payload = self.get_state_payload()
         if client is not None:
             client.publish(Config.topic("state"), json.dumps(payload), qos=0, retain=True)
-        if Config.STATE_LOGGING:
-            print(json.dumps(payload, sort_keys=True))

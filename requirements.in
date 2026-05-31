@@ -1,0 +1,2 @@
+-r requirements-control.txt
+-r requirements-ui.txt

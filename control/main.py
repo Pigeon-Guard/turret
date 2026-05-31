@@ -5,11 +5,11 @@ import sys
 import threading
 import time
 
-from app.config import Config
-from app.hardware import build_pin_factory, ServoAdapter, TriggerAdapter
-from app.mqtt_handler import MQTTHandler, create_mqtt_client
-from app.servo_controller import ServoController
-from app.state_manager import StateManager
+from config.config import Config
+from control.hardware import build_pin_factory, ServoAdapter, TriggerAdapter
+from control.mqtt_handler import MQTTHandler, create_mqtt_client
+from control.servo_controller import ServoController
+from control.state_manager import StateManager
 
 
 class TurretApplication:

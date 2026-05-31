@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Turret Control</title>
+  <script src="/config.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+  <style>
+    :root {
+      --bg: #090b12;
+      --panel: rgba(10,16,28,0.72);
+      --line: rgba(74, 227, 255, 0.82);
+      --line-soft: rgba(74, 227, 255, 0.25);
+      --danger: #ff5a66;
+      --danger-soft: rgba(255,90,102,0.24);
+      --text: #d9f7ff;
+      --text-muted: #86aab8;
+      --accent: #58ffd4;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: Inter, system-ui, sans-serif; }
+    body { color: var(--text); }
+    .scene { position: fixed; inset: 0; background: radial-gradient(circle at center, #0d1730 0%, #03060c 65%, #000 100%); }
+    video.stream {
+      position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; object-fit: cover;
+      filter: saturate(1.05) contrast(1.06);
+    }
+    .hud {
+      position: absolute; inset: 0; pointer-events: none;
+      background:
+        linear-gradient(to right, transparent 49.8%, rgba(88,255,212,.08) 50%, transparent 50.2%),
+        linear-gradient(to bottom, transparent 49.8%, rgba(88,255,212,.08) 50%, transparent 50.2%);
+    }
+    .vignette { position: absolute; inset: 0; background: radial-gradient(circle, transparent 45%, rgba(0,0,0,.35) 100%); }
+    .topbar {
+      position: absolute; top: 14px; left: 14px; right: 14px; display: flex; justify-content: space-between; gap: 12px;
+      pointer-events: none;
+    }
+    .pill {
+      pointer-events: auto;
+      background: var(--panel); border: 1px solid var(--line-soft); backdrop-filter: blur(8px);
+      border-radius: 999px; padding: 10px 14px; font-size: 14px; letter-spacing: .08em; text-transform: uppercase;
+      box-shadow: 0 0 18px rgba(34, 206, 255, 0.12), inset 0 0 18px rgba(34, 206, 255, 0.05);
+    }
+    .mode.manual { color: var(--accent); }
+    .mode.auto { color: #ffd166; }
+    .crosshair {
+      position: absolute; left: 50%; top: 50%; width: 110px; height: 110px; transform: translate(-50%, -50%); pointer-events: none;
+    }
+    .crosshair::before, .crosshair::after {
+      content: ""; position: absolute; background: var(--line); box-shadow: 0 0 10px rgba(74,227,255,.6);
+    }
+    .crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+    .crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+    .crosshair .ring {
+      position: absolute; inset: 25px; border: 2px solid var(--line); border-radius: 50%; box-shadow: 0 0 12px rgba(74,227,255,.35);
+    }
+    .crosshair .dot {
+      position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; border-radius: 50%; transform: translate(-50%, -50%);
+      background: var(--danger); box-shadow: 0 0 14px rgba(255,90,102,.72);
+    }
+    .controls {
+      position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: flex-end; padding: 20px;
+      pointer-events: none;
+    }
+    .cluster { display: flex; gap: 18px; align-items: center; pointer-events: auto; }
+    .pad, .fire-wrap {
+      width: min(34vw, 220px); height: min(34vw, 220px); border-radius: 50%; position: relative;
+      background: radial-gradient(circle at 50% 50%, rgba(18,27,43,.85), rgba(5,10,18,.55));
+      border: 1px solid rgba(74,227,255,.24); box-shadow: inset 0 0 22px rgba(74,227,255,.08), 0 0 22px rgba(0,0,0,.28);
+      touch-action: none; user-select: none;
+    }
+    .pad::before, .pad::after {
+      content: ""; position: absolute; background: rgba(74,227,255,.18);
+    }
+    .pad::before { width: 2px; height: 100%; left: 50%; top: 0; transform: translateX(-50%); }
+    .pad::after { height: 2px; width: 100%; left: 0; top: 50%; transform: translateY(-50%); }
+    .pad-label, .fire-label {
+      position: absolute; left: 50%; bottom: -32px; transform: translateX(-50%);
+      font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-muted);
+    }
+    .stick {
+      width: 82px; height: 82px; border-radius: 50%; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      background: radial-gradient(circle at 35% 30%, rgba(117,243,255,.95), rgba(26,111,138,.92));
+      border: 2px solid rgba(255,255,255,.18); box-shadow: 0 0 20px rgba(74,227,255,.4), inset 0 -8px 18px rgba(0,0,0,.25);
+    }
+    .fire {
+      position: absolute; inset: 16px; border-radius: 50%; display: grid; place-items: center;
+      background: radial-gradient(circle at 40% 30%, rgba(255,120,125,.96), rgba(156,25,39,.88));
+      border: 2px solid rgba(255,255,255,.14); box-shadow: 0 0 20px rgba(255,90,102,.35), inset 0 -14px 24px rgba(0,0,0,.28);
+      font-size: 28px; font-weight: 800; letter-spacing: .12em; color: #fff2f2; text-shadow: 0 0 10px rgba(255,255,255,.16);
+    }
+    .fire.active { transform: scale(0.96); box-shadow: 0 0 30px rgba(255,90,102,.62), inset 0 -14px 24px rgba(0,0,0,.32); }
+    .actions { display: flex; gap: 10px; align-items: center; }
+    button.small {
+      pointer-events: auto; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--panel); color: var(--text);
+      padding: 10px 14px; backdrop-filter: blur(8px); text-transform: uppercase; letter-spacing: .08em;
+    }
+    .status {
+      position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); pointer-events: none;
+      background: rgba(5, 12, 20, 0.72); border: 1px solid rgba(74,227,255,.22); border-radius: 999px; padding: 8px 14px;
+      font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-muted);
+    }
+    @media (max-width: 720px) {
+      .pad, .fire-wrap { width: 154px; height: 154px; }
+      .stick { width: 64px; height: 64px; }
+      .crosshair { width: 92px; height: 92px; }
+      .topbar { top: 10px; left: 10px; right: 10px; }
+      .controls { padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="scene">
+    <video id="stream" class="stream" autoplay muted playsinline></video>
+    <div class="hud"></div>
+    <div class="vignette"></div>
+    <div class="topbar">
+      <div class="pill mode manual" id="modePill">Manual</div>
+      <div class="actions">
+        <button class="small" id="manualBtn">Manual</button>
+        <button class="small" id="autoBtn">Auto</button>
+      </div>
+      <div class="pill" id="ownerPill">Owner: none</div>
+    </div>
+    <div class="crosshair">
+      <div class="ring"></div>
+      <div class="dot"></div>
+    </div>
+    <div class="controls">
+      <div class="cluster">
+        <div class="pad" id="pad">
+          <div class="stick" id="stick"></div>
+          <div class="pad-label">Aim</div>
+        </div>
+      </div>
+      <div class="cluster">
+        <div class="fire-wrap">
+          <div class="fire" id="fireBtn"></div>
+          <div class="fire-label">Trigger</div>
+        </div>
+      </div>
+    </div>
+    <div class="status" id="status">Connecting...</div>
+  </div>
+
+  <script>
+    const cfg = window.APP_CONFIG;
+    const streamVideo = document.getElementById('stream');
+    const modePill = document.getElementById('modePill');
+    const ownerPill = document.getElementById('ownerPill');
+    const statusEl = document.getElementById('status');
+    const fireBtn = document.getElementById('fireBtn');
+    const manualBtn = document.getElementById('manualBtn');
+    const autoBtn = document.getElementById('autoBtn');
+    const pad = document.getElementById('pad');
+    const stick = document.getElementById('stick');
+    let currentMode = 'manual';
+    let client = null;
+    let reconnectTimer = null;
+    let heartbeatTimer = null;
+    let pageUnloading = false;
+    let mqttReady = false;
+    let hls = null;
+
+    function setStatus(text) { statusEl.textContent = text; }
+    function topic(name) { return `${cfg.mqttTopic}/${name}`; }
+    function clearReconnectTimer() {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    }
+    function scheduleReconnect(reason) {
+      if (pageUnloading || reconnectTimer) return;
+      console.warn('Scheduling MQTT reconnect:', reason);
+      setStatus(`MQTT reconnecting... ${reason || ''}`.trim());
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectMqtt();
+      }, 1500);
+    }
+    function publish(name, payload) {
+      if (!client || !mqttReady) return;
+      const MessageCtor = (window.Paho && window.Paho.MQTT && window.Paho.MQTT.Message) || (window.Paho && window.Paho.Message);
+      const msg = new MessageCtor(JSON.stringify(payload));
+      msg.destinationName = topic(name);
+      client.send(msg);
+    }
+    function setMode(mode) {
+      currentMode = mode;
+      publish('mode/set', { mode, owner: cfg.uiOwner });
+      modePill.textContent = mode;
+      modePill.className = `pill mode ${mode}`;
+    }
+
+    function loadStream(url) {
+      const streamUrl = url || cfg.defaultStreamUrl;
+
+      if (!streamUrl) {
+        console.warn('No stream URL configured');
+        setStatus('No video stream configured');
+        return;
+      }
+
+      console.info('Loading HLS stream', streamUrl);
+
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+
+      if (Hls.isSupported()) {
+        hls = new Hls({
+          lowLatencyMode: true,
+          backBufferLength: 30,
+          maxBufferLength: 10,
+          maxMaxBufferLength: 20,
+          liveSyncDurationCount: 3,
+          debug: true
+        });
+
+        hls.loadSource(streamUrl);
+        hls.attachMedia(streamVideo);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          console.info('HLS manifest parsed');
+          streamVideo.play().catch(err => console.warn('Autoplay blocked', err));
+        });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error('HLS error', data);
+          if (data.fatal) {
+            switch(data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.error('Fatal network error');
+                setStatus(`Stream unavailable: ${data.details || 'network error'}`);
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.error('Fatal media error, trying to recover');
+                hls.recoverMediaError();
+                break;
+              default:
+                console.error('Fatal error, cannot recover');
+                setStatus(`Video error: ${data.details || data.type}`);
+                break;
+            }
+          }
+        });
+      } else if (streamVideo.canPlayType('application/vnd.apple.mpegurl')) {
+        streamVideo.src = streamUrl;
+        streamVideo.addEventListener('loadedmetadata', () => {
+          streamVideo.play().catch(err => console.warn('Native HLS autoplay blocked', err));
+        }, { once: true });
+      } else {
+        setStatus('HLS not supported in this browser');
+      }
+    }
+
+    const PahoCtor = (window.Paho && window.Paho.MQTT && window.Paho.MQTT.Client) || (window.Paho && window.Paho.Client);
+    if (!PahoCtor) {
+      setStatus('MQTT library failed to load');
+      throw new Error('Paho MQTT library not available');
+    }
+
+    function startHeartbeat() {
+      if (heartbeatTimer) return;
+      heartbeatTimer = setInterval(() => publish('heartbeat', { owner: cfg.uiOwner }), 1000);
+    }
+    function stopHeartbeat() {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    }
+    function connectMqtt() {
+      clearReconnectTimer();
+      stopHeartbeat();
+      mqttReady = false;
+      const clientId = `browser-${Math.random().toString(16).slice(2)}`;
+      client = new PahoCtor(cfg.mqttHost, Number(cfg.mqttPort), cfg.mqttPath, clientId);
+      client.onConnectionLost = (responseObject) => {
+        mqttReady = false;
+        console.warn('MQTT connection lost', responseObject);
+        if (pageUnloading) return;
+        setStatus(`MQTT disconnected: ${responseObject?.errorMessage || 'socket closed'}`);
+        scheduleReconnect(responseObject?.errorMessage || 'socket closed');
+      };
+      client.onMessageArrived = (message) => {
+        if (message.destinationName === topic('state')) {
+          const data = JSON.parse(message.payloadString);
+          ownerPill.textContent = `Owner: ${data.owner || 'none'}`;
+          if (data.mode) {
+            currentMode = data.mode;
+            modePill.textContent = data.mode;
+            modePill.className = `pill mode ${data.mode}`;
+          }
+          setStatus(`Pan ${Number(data.pan_angle ?? 0).toFixed(0)}° | Tilt ${Number(data.tilt_angle ?? 0).toFixed(0)}°`);
+        }
+      };
+      client.connect({
+        useSSL: false,
+        timeout: 5,
+        keepAliveInterval: 30,
+        reconnect: true,
+        cleanSession: true,
+        onSuccess: () => {
+          mqttReady = true;
+          console.info('MQTT connected', clientId);
+          client.subscribe(topic('state'));
+          setStatus('MQTT connected');
+          setMode('manual');
+          startHeartbeat();
+        },
+        onFailure: (err) => {
+          mqttReady = false;
+          console.error('MQTT connect failed', err);
+          setStatus(`MQTT failed: ${err.errorMessage || 'unknown error'}`);
+          scheduleReconnect(err.errorMessage || 'connect failed');
+        }
+      });
+    }
+
+    window.addEventListener('beforeunload', () => {
+      pageUnloading = true;
+      stopHeartbeat();
+      clearReconnectTimer();
+      try {
+        if (client && client.isConnected && client.isConnected()) {
+          client.disconnect();
+        }
+      } catch (err) {
+        console.warn('MQTT disconnect on unload failed', err);
+      }
+      try {
+        if (hls) hls.destroy();
+      } catch (err) {
+        console.warn('HLS cleanup failed', err);
+      }
+    });
+
+    connectMqtt();
+    loadStream(cfg.defaultStreamUrl);
+
+    manualBtn.addEventListener('click', () => setMode('manual'));
+    autoBtn.addEventListener('click', () => setMode('auto'));
+
+    function triggerFire(active) {
+      fireBtn.classList.toggle('active', active);
+      if (active) publish('trigger/fire', { owner: cfg.uiOwner, mode: currentMode });
+    }
+    ['pointerdown'].forEach(ev => fireBtn.addEventListener(ev, () => triggerFire(true)));
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => fireBtn.addEventListener(ev, () => triggerFire(false)));
+
+    let joystickTimer = null;
+    let joystick = { dx: 0, dy: 0 };
+
+    function updateStick(dx, dy) {
+      const r = pad.clientWidth * 0.34;
+      const x = dx * r;
+      const y = dy * r;
+      stick.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+    }
+
+    function sendJoystick() {
+      if (currentMode !== 'manual') return;
+      publish('manual/joystick', { owner: cfg.uiOwner, dx: joystick.dx, dy: joystick.dy });
+    }
+
+    function handlePointer(clientX, clientY) {
+      const rect = pad.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let dx = (clientX - cx) / (rect.width * 0.34);
+      let dy = (clientY - cy) / (rect.height * 0.34);
+      const len = Math.hypot(dx, dy);
+      if (len > 1) { dx /= len; dy /= len; }
+      joystick = { dx, dy };
+      updateStick(dx, dy);
+    }
+
+    function resetJoystick() {
+      joystick = { dx: 0, dy: 0 };
+      updateStick(0, 0);
+      if (joystickTimer) {
+        clearInterval(joystickTimer);
+        joystickTimer = null;
+      }
+    }
+
+    pad.addEventListener('pointerdown', (e) => {
+      setMode('manual');
+      handlePointer(e.clientX, e.clientY);
+      sendJoystick();
+      if (!joystickTimer) joystickTimer = setInterval(sendJoystick, 80);
+      pad.setPointerCapture(e.pointerId);
+    });
+    pad.addEventListener('pointermove', (e) => {
+      if (e.pressure === 0 && e.buttons === 0) return;
+      handlePointer(e.clientX, e.clientY);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => pad.addEventListener(ev, resetJoystick));
+
+    fetch('/state').then(r => r.json()).then(data => {
+      if (data.camera_hls_url) loadStream(data.camera_hls_url);
+    }).catch(() => loadStream(cfg.defaultStreamUrl));
+  </script>
+</body>
+</html>

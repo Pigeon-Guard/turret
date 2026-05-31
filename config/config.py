@@ -15,7 +15,6 @@ class Config:
     MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
     MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
     MQTT_TOPIC = os.getenv("MQTT_TOPIC", "pguard")
-    MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "pguard-turret")
 
     # Timing Configuration
     OWNER_TIMEOUT_SEC = float(os.getenv("OWNER_TIMEOUT_SEC", "2.0"))
@@ -37,7 +36,14 @@ class Config:
 
     # Backend Configuration
     SERVO_BACKEND = os.getenv("SERVO_BACKEND", "auto").lower()
-    STATE_LOGGING = os.getenv("STATE_LOGGING", "1") == "1"
+
+    # UI Configuration
+    HTTP_HOST = os.getenv("HTTP_HOST", "0.0.0.0")
+    HTTP_PORT = int(os.getenv("HTTP_PORT", "8080"))
+    MQTT_WEBSOCKET_PORT = int(os.getenv("MQTT_WEBSOCKET_PORT", "8083"))
+    MQTT_WEBSOCKET_PATH = os.getenv("MQTT_WEBSOCKET_PATH", "/mqtt")
+    UI_OWNER = os.getenv("UI_OWNER", "phone-ui")
+    HLS_URL = os.getenv("HLS_URL", "http://video:8888/stream/index.m3u8")
 
     @classmethod
     def topic(cls, name: str) -> str:
