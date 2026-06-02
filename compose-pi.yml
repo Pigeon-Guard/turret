@@ -8,6 +8,7 @@ services:
       - MQTT_PORT=${MQTT_PORT}
       - MQTT_TOPIC=${MQTT_TOPIC}
       - MQTT_CLIENT_ID=${MQTT_CLIENT_ID}
+    restart: unless-stopped
   ui:
     image: ghcr.io/pigeon-guard/turret-ui:latest
     ports:
@@ -21,6 +22,7 @@ services:
       - MQTT_TOPIC=${MQTT_TOPIC}
       - MQTT_CLIENT_ID=${MQTT_CLIENT_ID}
       - HLS_URL=${HLS_URL}
+    restart: unless-stopped
   video:
     image: bluenviron/mediamtx:1-ffmpeg-rpi
     ports:
@@ -28,6 +30,7 @@ services:
       - "8888:8888" # HLS
     environment:
       - MTX_PROTOCOLS=tcp
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "nc", "-z", "-w", "2", "localhost", "8554"]
       interval: 30s
