@@ -25,16 +25,15 @@ services:
       - MQTT_PORT=${MQTT_PORT}
       - MQTT_TOPIC=${MQTT_TOPIC}
       - MQTT_CLIENT_ID=${MQTT_CLIENT_ID}
-      - HLS_URL=${HLS_URL}
+      - WEBRTC_URL=${WEBRTC_URL}
     restart: unless-stopped
   video:
     image: bluenviron/mediamtx:1
     ports:
-      - "8554:8554" # TCP/RTSP
-      - "7777:7777" # HLS
+      - "8889:8889" # WebRTC
+      - "8189:8189/udp"
     environment:
       - MTX_PROTOCOLS=tcp
-      - MTX_HLSADDRESS=:7777
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "nc", "-z", "-w", "2", "localhost", "8554"]

@@ -6,7 +6,7 @@
   <title>Turret Control</title>
   <script src="/config.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+  <script src="/reader.js"></script>
   <style>
     :root {
       --bg: #090b12;
@@ -159,28 +159,69 @@
     const stick = document.getElementById('stick');
     let currentMode = 'manual';
     let client = null;
-    let reconnectTimer = null;
+    let mqttReconnectTimer = null;
     let heartbeatTimer = null;
     let pageUnloading = false;
     let mqttReady = false;
-    let hls = null;
+    let webrtcReader = null;
+    let webrtcReconnectTimer = null;
+    let webrtcReady = false;
 
-    function setStatus(text) { statusEl.textContent = text; }
+    // Status tracking for both connections
+    let mqttStatus = 'disconnected';
+    let webrtcStatus = 'disconnected';
+
+    function updateStatus() {
+      const mqtt = mqttStatus === 'connected' ? '✓ Controls' : '✗ Controls';
+      const webrtc = webrtcStatus === 'connected' ? '✓ Video' : '✗ Video';
+      statusEl.textContent = `${mqtt} | ${webrtc}`;
+    }
+
+    function setMqttStatus(status, message) {
+      mqttStatus = status;
+      console.info('MQTT status:', status, message || '');
+      updateStatus();
+    }
+
+    function setWebRtcStatus(status, message) {
+      webrtcStatus = status;
+      console.info('WebRTC status:', status, message || '');
+      updateStatus();
+    }
     function topic(name) { return `${cfg.mqttTopic}/${name}`; }
-    function clearReconnectTimer() {
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
+
+    function clearMqttReconnectTimer() {
+      if (mqttReconnectTimer) {
+        clearTimeout(mqttReconnectTimer);
+        mqttReconnectTimer = null;
       }
     }
-    function scheduleReconnect(reason) {
-      if (pageUnloading || reconnectTimer) return;
+
+    function scheduleMqttReconnect(reason) {
+      if (pageUnloading || mqttReconnectTimer) return;
       console.warn('Scheduling MQTT reconnect:', reason);
-      setStatus(`MQTT reconnecting... ${reason || ''}`.trim());
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
+      setMqttStatus('reconnecting', reason);
+      mqttReconnectTimer = setTimeout(() => {
+        mqttReconnectTimer = null;
         connectMqtt();
-      }, 1500);
+      }, 3000);
+    }
+
+    function clearWebRtcReconnectTimer() {
+      if (webrtcReconnectTimer) {
+        clearTimeout(webrtcReconnectTimer);
+        webrtcReconnectTimer = null;
+      }
+    }
+
+    function scheduleWebRtcReconnect(reason) {
+      if (pageUnloading || webrtcReconnectTimer) return;
+      console.warn('Scheduling WebRTC reconnect:', reason);
+      setWebRtcStatus('reconnecting', reason);
+      webrtcReconnectTimer = setTimeout(() => {
+        webrtcReconnectTimer = null;
+        initWebRTC();
+      }, 3000);
     }
     function publish(name, payload) {
       if (!client || !mqttReady) return;
@@ -196,67 +237,55 @@
       modePill.className = `pill mode ${mode}`;
     }
 
-    function loadStream(url) {
-      const streamUrl = url || cfg.defaultStreamUrl;
-
-      if (!streamUrl) {
-        console.warn('No stream URL configured');
-        setStatus('No video stream configured');
-        return;
+    function closeWebRTC() {
+      clearWebRtcReconnectTimer();
+      if (webrtcReader) {
+        try {
+          console.info('Closing WebRTC reader');
+          webrtcReader.close();
+          webrtcReader = null;
+        } catch (err) {
+          console.warn('Failed to close WebRTC reader:', err);
+        }
       }
+      webrtcReady = false;
+      setWebRtcStatus('disconnected');
+    }
 
-      console.info('Loading HLS stream', streamUrl);
+    function initWebRTC() {
+      if (pageUnloading) return;
 
-      if (hls) {
-        hls.destroy();
-        hls = null;
-      }
+      console.info('Initializing WebRTC connection to MediaMTX');
+      setWebRtcStatus('connecting');
 
-      if (Hls.isSupported()) {
-        hls = new Hls({
-          lowLatencyMode: true,
-          backBufferLength: 30,
-          maxBufferLength: 10,
-          maxMaxBufferLength: 20,
-          liveSyncDurationCount: 3,
-          debug: true
-        });
+      // Close any existing connection
+      closeWebRTC();
 
-        hls.loadSource(streamUrl);
-        hls.attachMedia(streamVideo);
-
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.info('HLS manifest parsed');
-          streamVideo.play().catch(err => console.warn('Autoplay blocked', err));
-        });
-
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          console.error('HLS error', data);
-          if (data.fatal) {
-            switch(data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                console.error('Fatal network error');
-                setStatus(`Stream unavailable: ${data.details || 'network error'}`);
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                console.error('Fatal media error, trying to recover');
-                hls.recoverMediaError();
-                break;
-              default:
-                console.error('Fatal error, cannot recover');
-                setStatus(`Video error: ${data.details || data.type}`);
-                break;
-            }
+      // Create MediaMTX WebRTC reader
+      webrtcReader = new MediaMTXWebRTCReader({
+        url: cfg.webrtcUrl,
+        onError: (err) => {
+          console.error('WebRTC error:', err);
+          setWebRtcStatus('failed', err);
+          webrtcReady = false;
+          // MediaMTXWebRTCReader handles automatic reconnection
+          // We only schedule reconnect if reader is closed
+          if (!webrtcReader) {
+            scheduleWebRtcReconnect(err);
           }
-        });
-      } else if (streamVideo.canPlayType('application/vnd.apple.mpegurl')) {
-        streamVideo.src = streamUrl;
-        streamVideo.addEventListener('loadedmetadata', () => {
-          streamVideo.play().catch(err => console.warn('Native HLS autoplay blocked', err));
-        }, { once: true });
-      } else {
-        setStatus('HLS not supported in this browser');
-      }
+        },
+        onTrack: (evt) => {
+          console.info('Received remote track:', evt.track.kind);
+          if (evt.track.kind === 'video') {
+            streamVideo.srcObject = evt.streams[0];
+            streamVideo.play().catch(err => console.warn('Autoplay blocked', err));
+            webrtcReady = true;
+            setWebRtcStatus('connected', 'Video stream playing');
+          }
+        }
+      });
+
+      console.info('WebRTC reader created');
     }
 
     const PahoCtor = (window.Paho && window.Paho.MQTT && window.Paho.MQTT.Client) || (window.Paho && window.Paho.Client);
@@ -276,18 +305,65 @@
       }
     }
     function connectMqtt() {
-      clearReconnectTimer();
+      if (pageUnloading) return;
+
+      clearMqttReconnectTimer();
       stopHeartbeat();
       mqttReady = false;
       const clientId = `browser-${Math.random().toString(16).slice(2)}`;
-      client = new PahoCtor(cfg.mqttHost, Number(cfg.mqttPort), cfg.mqttPath, clientId);
+
+      // Ensure path is a valid string - Paho needs path WITHOUT leading slash
+      let mqttPath = String(cfg.mqttPath || '/mqtt').trim();
+
+      // Add leading slash if not present
+      if (!mqttPath.startsWith('/')) {
+        mqttPath = '/' + mqttPath;
+      }
+      const mqttHost = String(cfg.mqttHost).trim();
+      const mqttPort = Number(cfg.mqttPort);
+
+      // Validate parameters
+      if (!mqttHost || !mqttPort || !clientId) {
+        console.error('Invalid MQTT parameters', { mqttHost, mqttPort, clientId });
+        setMqttStatus('failed', 'Invalid config');
+        return;
+      }
+
+      console.info('MQTT connecting to:', {
+        host: mqttHost,
+        port: mqttPort,
+        path: mqttPath,
+        clientId: clientId,
+        url: `ws://${mqttHost}:${mqttPort}/${mqttPath}`,
+        types: {
+          host: typeof mqttHost,
+          port: typeof mqttPort,
+          path: typeof mqttPath,
+          clientId: typeof clientId
+        }
+      });
+
+      setMqttStatus('connecting');
+
+      // Create client with path parameter - Paho requires: host, port, path, clientId
+      try {
+        client = new PahoCtor(mqttHost, mqttPort, mqttPath, clientId);
+        console.info('MQTT client created successfully');
+      } catch (err) {
+        console.error('Failed to create MQTT client:', err, err.stack);
+        setMqttStatus('failed', 'Client creation failed');
+        scheduleMqttReconnect('Client creation failed');
+        return;
+      }
+
       client.onConnectionLost = (responseObject) => {
         mqttReady = false;
         console.warn('MQTT connection lost', responseObject);
         if (pageUnloading) return;
-        setStatus(`MQTT disconnected: ${responseObject?.errorMessage || 'socket closed'}`);
-        scheduleReconnect(responseObject?.errorMessage || 'socket closed');
+        setMqttStatus('disconnected', responseObject?.errorMessage || 'socket closed');
+        scheduleMqttReconnect(responseObject?.errorMessage || 'socket closed');
       };
+
       client.onMessageArrived = (message) => {
         if (message.destinationName === topic('state')) {
           const data = JSON.parse(message.payloadString);
@@ -297,52 +373,70 @@
             modePill.textContent = data.mode;
             modePill.className = `pill mode ${data.mode}`;
           }
-          setStatus(`Pan ${Number(data.pan_angle ?? 0).toFixed(0)}° | Tilt ${Number(data.tilt_angle ?? 0).toFixed(0)}°`);
         }
       };
+
       client.connect({
         useSSL: false,
-        timeout: 5,
+        timeout: 30,
         keepAliveInterval: 30,
-        reconnect: true,
+        reconnect: false,
         cleanSession: true,
+        mqttVersion: 4,
         onSuccess: () => {
           mqttReady = true;
           console.info('MQTT connected', clientId);
           client.subscribe(topic('state'));
-          setStatus('MQTT connected');
+          setMqttStatus('connected', 'Subscribed to state');
           setMode('manual');
           startHeartbeat();
         },
         onFailure: (err) => {
           mqttReady = false;
           console.error('MQTT connect failed', err);
-          setStatus(`MQTT failed: ${err.errorMessage || 'unknown error'}`);
-          scheduleReconnect(err.errorMessage || 'connect failed');
+          setMqttStatus('failed', err.errorMessage || 'unknown error');
+          scheduleMqttReconnect(err.errorMessage || 'connect failed');
         }
       });
     }
 
-    window.addEventListener('beforeunload', () => {
+    function cleanup() {
       pageUnloading = true;
       stopHeartbeat();
-      clearReconnectTimer();
+      clearMqttReconnectTimer();
+      clearWebRtcReconnectTimer();
+
+      // Close MQTT connection
       try {
         if (client && client.isConnected && client.isConnected()) {
           client.disconnect();
         }
       } catch (err) {
-        console.warn('MQTT disconnect on unload failed', err);
+        console.warn('MQTT disconnect failed', err);
       }
-      try {
-        if (hls) hls.destroy();
-      } catch (err) {
-        console.warn('HLS cleanup failed', err);
+
+      // Close WebRTC reader
+      if (webrtcReader) {
+        try {
+          webrtcReader.close();
+        } catch (err) {
+          console.warn('WebRTC close failed', err);
+        }
+      }
+    }
+
+    // Use multiple events for better cleanup reliability
+    window.addEventListener('beforeunload', cleanup);
+    window.addEventListener('pagehide', cleanup);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        cleanup();
       }
     });
 
+    // Initialize both connections in parallel - they are independent
     connectMqtt();
-    loadStream(cfg.defaultStreamUrl);
+    initWebRTC();
 
     manualBtn.addEventListener('click', () => setMode('manual'));
     autoBtn.addEventListener('click', () => setMode('auto'));
@@ -402,10 +496,6 @@
       handlePointer(e.clientX, e.clientY);
     });
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => pad.addEventListener(ev, resetJoystick));
-
-    fetch('/state').then(r => r.json()).then(data => {
-      if (data.camera_hls_url) loadStream(data.camera_hls_url);
-    }).catch(() => loadStream(cfg.defaultStreamUrl));
   </script>
 </body>
 </html>

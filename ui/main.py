@@ -11,10 +11,11 @@ from config.config import Config
 
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
+READER_JS_FILE = BASE_DIR / "reader.js"
 
 app = Flask(__name__)
 last_state = {
-    "camera_hls_url": Config.HLS_URL,
+    "webrtc_url": Config.WEBRTC_URL,
     "mode": "manual",
     "owner": "none",
 }
@@ -64,12 +65,18 @@ def index():
     return send_file(INDEX_FILE)
 
 
+@app.route("/reader.js")
+def reader_js():
+    """Serve the MediaMTX WebRTC reader JavaScript."""
+    return send_file(READER_JS_FILE, mimetype="application/javascript")
+
+
 @app.route("/config.js")
 def config_js():
     """Generate JavaScript configuration from environment."""
     request_host = request.host.split(':')[0]
     mqtt_host = Config.MQTT_HOST.replace("message", request_host)
-    hls_url = Config.HLS_URL.replace("camera", request_host)
+    webrtc_url = Config.WEBRTC_URL.replace("video", request_host)
 
     config = {
         "mqttHost": mqtt_host or get_local_ip(),
@@ -77,7 +84,7 @@ def config_js():
         "mqttPath": Config.MQTT_WEBSOCKET_PATH,
         "mqttTopic": Config.MQTT_TOPIC,
         "uiOwner": Config.UI_OWNER,
-        "defaultStreamUrl": last_state.get("camera_hls_url", hls_url),
+        "webrtcUrl": last_state.get("webrtc_url", webrtc_url),
     }
     payload = f"window.APP_CONFIG = {json.dumps(config)};"
     return Response(payload, mimetype="application/javascript")

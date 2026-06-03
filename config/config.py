@@ -43,7 +43,7 @@ class Config:
     MQTT_WEBSOCKET_PORT = int(os.getenv("MQTT_WEBSOCKET_PORT", "8083"))
     MQTT_WEBSOCKET_PATH = os.getenv("MQTT_WEBSOCKET_PATH", "/mqtt")
     UI_OWNER = os.getenv("UI_OWNER", "phone-ui")
-    HLS_URL = os.getenv("HLS_URL", "http://video:8888/stream/index.m3u8")
+    WEBRTC_URL = os.getenv("WEBRTC_URL", "http://video:8889/cam/whep")
 
     @classmethod
     def topic(cls, name: str) -> str:

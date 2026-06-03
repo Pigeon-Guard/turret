@@ -21,10 +21,10 @@ services:
       - MQTT_PORT=${MQTT_PORT}
       - MQTT_TOPIC=${MQTT_TOPIC}
       - MQTT_CLIENT_ID=${MQTT_CLIENT_ID}
-      - HLS_URL=${HLS_URL}
+      - WEBRTC_URL=${WEBRTC_URL}
     restart: unless-stopped
   video:
-    image: bluenviron/mediamtx:1-ffmpeg-rpi
+    image: bluenviron/mediamtx:1-rpi
     network_mode: host
     privileged: true
     tmpfs:
@@ -33,7 +33,16 @@ services:
       - /run/udev:/run/udev:ro
     environment:
       - MTX_PATHS_CAM_SOURCE=rpiCamera
-      - MTX_HLSADDRESS=:7777
+      - MTX_PATHS_CAM_RPICAMERAWIDTH=1024
+      - MTX_PATHS_CAM_RPICAMERAHEIGHT=1024
+      - MTX_PATHS_CAM_RPICAMERAFPS=10
+      - MTX_PATHS_CAM_RPICAMERABITRATE=800000
+      - MTX_WEBRTC=true
+      - MTX_RTSP=true
+      - MTX_RTMP=false
+      - MTX_HLS=false
+      - MTX_SRT=false
+      - MTX_MOQ=false
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "nc", "-z", "-w", "2", "localhost", "8554"]
