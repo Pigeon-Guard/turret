@@ -25,11 +25,15 @@ services:
     restart: unless-stopped
   video:
     image: bluenviron/mediamtx:1-ffmpeg-rpi
-    ports:
-      - "8554:8554" # TCP/RTSP
-      - "8888:8888" # HLS
+    network_mode: host
+    privileged: true
+    tmpfs:
+      - /dev/shm:exec
+    volumes:
+      - /run/udev:/run/udev:ro
     environment:
-      - MTX_PROTOCOLS=tcp
+      - MTX_PATHS_CAM_SOURCE=rpiCamera
+      - MTX_HLSADDRESS=:7777
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "nc", "-z", "-w", "2", "localhost", "8554"]

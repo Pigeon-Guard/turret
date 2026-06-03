@@ -24,7 +24,7 @@ Then edit `.env` with your settings. See `.env.example` for all available option
 mkdir ~/turret
 cd ~/turret
 
-wget https://github.com/Pigeon-Guard/turret/raw/refs/heads/main/.env.example -O .env
+wget https://github.com/pigeon-guard/turret/raw/refs/heads/main/.env.example -O .env
 wget https://github.com/pigeon-guard/turret/raw/refs/heads/main/compose-pi.yml -O compose.yml
 ```
 

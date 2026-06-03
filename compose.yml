@@ -31,9 +31,10 @@ services:
     image: bluenviron/mediamtx:1
     ports:
       - "8554:8554" # TCP/RTSP
-      - "8888:8888" # HLS
+      - "7777:7777" # HLS
     environment:
       - MTX_PROTOCOLS=tcp
+      - MTX_HLSADDRESS=:7777
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "nc", "-z", "-w", "2", "localhost", "8554"]
