@@ -9,7 +9,7 @@ services:
       - MQTT_PORT=${MQTT_PORT}
       - MQTT_TOPIC=${MQTT_TOPIC}
       - MQTT_CLIENT_ID=${MQTT_CLIENT_ID}
-    restart: unless-stopped
+    restart: always
   ui:
     image: ghcr.io/pigeon-guard/turret-ui:latest
     ports:
@@ -23,7 +23,7 @@ services:
       - MQTT_TOPIC=${MQTT_TOPIC}
       - MQTT_CLIENT_ID=${MQTT_CLIENT_ID}
       - WEBRTC_URL=${WEBRTC_URL}
-    restart: unless-stopped
+    restart: always
   video:
     image: bluenviron/mediamtx:1-rpi
     network_mode: host
@@ -44,7 +44,7 @@ services:
       - MTX_HLS=false
       - MTX_SRT=false
       - MTX_MOQ=false
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD", "nc", "-z", "-w", "2", "localhost", "8554"]
       interval: 30s
@@ -62,7 +62,7 @@ services:
       - NANOMQ_HTTP_SERVER_ENABLE=false
       - NANOMQ_WEBSOCKET_ENABLE=true
       - NANOMQ_WEBSOCKET_URL=nmq-ws://0.0.0.0:8083/mqtt
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD", "nc", "-z", "-w", "2", "localhost", "1883"]
       interval: 30s
