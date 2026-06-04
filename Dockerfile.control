@@ -29,11 +29,6 @@ RUN python -m pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ============ RUNTIME STAGE ============
 FROM python:3.12-slim
 
-# Install gosu for clean user switching and GPIO device access
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gosu \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 # Copy all pigpio runtime artifacts from builder
@@ -44,16 +39,12 @@ COPY --from=builder /usr/local /usr/local
 COPY control/ ./control/
 COPY config/ ./config/
 
-# Create non-root user for security
-RUN useradd -m -u 1000 turret \
-    && chown -R turret:turret /app
-
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV LD_LIBRARY_PATH=/usr/local/lib
 ENV PIGPIO_ADDR=127.0.0.1
 ENV PIGPIO_PORT=8888
 
-# Start pigpiod as root, then switch to turret user for the app
-# This ensures pigpiod has privileges to access GPIO devices
-CMD ["sh", "-c", "pigpiod -l && exec gosu turret python -m control.main"]
+COPY docker-entrypoint.control.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

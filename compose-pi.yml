@@ -1,10 +1,9 @@
 services:
   control:
     image: ghcr.io/pigeon-guard/turret-control:latest
+    privileged: true
     depends_on:
       - message
-    devices:
-      - /dev/gpiomem:/dev/gpiomem
     environment:
       - MQTT_HOST=${MQTT_HOST}
       - MQTT_PORT=${MQTT_PORT}
