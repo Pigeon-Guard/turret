@@ -12,6 +12,8 @@ from config.config import Config
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
 READER_JS_FILE = BASE_DIR / "reader.js"
+MANIFEST_FILE = BASE_DIR / "manifest.json"
+LOGO_FILE = BASE_DIR / "logo.png"
 
 app = Flask(__name__)
 last_state = {
@@ -69,6 +71,18 @@ def index():
 def reader_js():
     """Serve the MediaMTX WebRTC reader JavaScript."""
     return send_file(READER_JS_FILE, mimetype="application/javascript")
+
+
+@app.route("/manifest.json")
+def manifest():
+    """Serve the web app manifest for PWA support."""
+    return send_file(MANIFEST_FILE, mimetype="application/json")
+
+
+@app.route("/logo.png")
+def logo():
+    """Serve the app logo/icon."""
+    return send_file(LOGO_FILE, mimetype="image/png")
 
 
 @app.route("/config.js")
