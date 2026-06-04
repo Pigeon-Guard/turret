@@ -1,21 +1,59 @@
-FROM python:3.11-slim AS base
+# Multi-stage Dockerfile for Raspberry Pi Zero GPIO control with pigpio
+# Target: Pi Zero W (armv6) or Pi Zero 2 W (armv7)
+
+# ============ BUILD STAGE ============
+FROM python:3.12-slim AS builder
+
+# Install build dependencies and pigpio source
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Clone and build pigpio from source (most reliable for ARM)
+RUN mkdir -p /usr/src/pigpio \
+    && cd /usr/src/pigpio \
+    && git clone https://github.com/joan2937/pigpio.git . \
+    && make \
+    && make install \
+    && ldconfig
+
+# Install Python dependencies
+WORKDIR /build
+COPY requirements-control.txt requirements.txt
+RUN python -m pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ============ RUNTIME STAGE ============
+FROM python:3.12-slim
+
+# Install gosu for clean user switching and GPIO device access
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gosu \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY requirements-control.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy all pigpio runtime artifacts from builder
+COPY --from=builder /install /usr/local
+COPY --from=builder /usr/local /usr/local
 
 # Copy application code
 COPY control/ ./control/
 COPY config/ ./config/
 
 # Create non-root user for security
-RUN useradd -m -u 1000 turret && chown -R turret:turret /app
-USER turret
+RUN useradd -m -u 1000 turret \
+    && chown -R turret:turret /app
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
+ENV LD_LIBRARY_PATH=/usr/local/lib
+ENV PIGPIO_ADDR=127.0.0.1
+ENV PIGPIO_PORT=8888
 
-# Run the application
-CMD ["python", "-m", "control.main"]
+# Start pigpiod as root, then switch to turret user for the app
+# This ensures pigpiod has privileges to access GPIO devices
+CMD ["sh", "-c", "pigpiod -l && exec gosu turret python -m control.main"]
